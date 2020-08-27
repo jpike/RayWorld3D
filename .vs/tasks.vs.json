@@ -1,0 +1,20 @@
+{
+    "version": "0.2.1",
+    "tasks": 
+    [
+        {
+            "taskLabel": "task-build",
+            "appliesTo": "build.bat",
+            "type": "launch",
+            "contextType": "build",
+            "command": "build.bat"
+        },
+        {
+            "taskLabel": "task-build_web",
+            "appliesTo": "build_web.bat",
+            "type": "launch",
+            "contextType": "build",
+            "command": "build_web.bat"
+        }
+    ]
+}
