@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cstdio>
+#include <vector>
 #if __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -9,15 +11,111 @@
 
 Camera3D g_camera;
 
+enum class ObjectType
+{
+    INVALID = 0,
+    LINE,
+    CUBE,
+    SPHERE,
+    CYLINDER,
+};
+
+class Line
+{
+public:
+    Vector3 StartPosition = {};
+    Vector3 EndPosition = {};
+};
+
+class Cube
+{
+public:
+    Vector3 CenterPosition = {};
+    Vector3 Size = {};
+};
+
+class Sphere
+{
+public:
+    Vector3 CenterPosition = {};
+    float Radius = 0.0f;
+};
+
+class Cylinder
+{
+public:
+    Vector3 CenterPosition = {};
+    float TopRadius = 0.0f;
+    float BottomRadius = 0.0f;
+    float Height = 0.0f;
+    int SliceCount = 0;
+};
+
+class Object3D
+{
+public:
+    BoundingBox GetBoundingBox() const
+    {
+        BoundingBox bounding_box;
+
+        switch (Type)
+        {
+            case ObjectType::LINE:
+            {
+                bounding_box.min = Vector3Min(Line.StartPosition, Line.EndPosition);
+                bounding_box.max = Vector3Max(Line.StartPosition, Line.EndPosition);
+                break;
+            }
+            case ObjectType::CUBE:
+            {
+                Vector3 cube_half_size = Vector3Scale(Cube.Size, 0.5f);
+                bounding_box.min = Vector3Subtract(Cube.CenterPosition, cube_half_size);
+                bounding_box.max = Vector3Add(Cube.CenterPosition, cube_half_size);
+                break;
+            }
+            case ObjectType::SPHERE:
+            {
+                bounding_box.min = Vector3SubtractValue(Sphere.CenterPosition, Sphere.Radius);
+                bounding_box.max = Vector3AddValue(Sphere.CenterPosition, Sphere.Radius);
+                break;
+            }
+            case ObjectType::CYLINDER:
+            {
+                float cylinder_max_radius = std::max(Cylinder.TopRadius, Cylinder.TopRadius);
+                float cylinder_half_height = Cylinder.Height / 2.0f;
+                Vector3 cylinder_half_size = { cylinder_max_radius, cylinder_half_height, cylinder_max_radius };
+
+                bounding_box.min = Vector3Subtract(Cylinder.CenterPosition, cylinder_half_size);
+                bounding_box.max = Vector3Add(Cylinder.CenterPosition, cylinder_half_size);
+                break;
+            }
+        }
+
+        return bounding_box;
+    }
+
+    ObjectType Type = ObjectType::INVALID;
+    Color SolidColor = BLACK;
+
+    union
+    {
+        Line Line;
+        Cube Cube;
+        Sphere Sphere;
+        Cylinder Cylinder;
+    };
+};
+
 class Scene
 {
 public:
     Color BackgroundColor = BLACK;
+    std::vector<Object3D> Objects = {};
 };
 
 Scene g_scene;
 
-void UpdateAndDrawFrame()
+void UpdateAndDrawFrameGui()
 {
     // UPDATE.
     UpdateCamera(&g_camera);
@@ -151,7 +249,7 @@ void UpdateAndDrawFrame()
     EndDrawing();
 }
 
-void UpdateAndDrawFrameOld()
+void UpdateAndDrawFrame()
 {
 #if !__EMSCRIPTEN__
     // https://en.wikipedia.org/wiki/Table_of_keyboard_shortcuts
@@ -161,52 +259,103 @@ void UpdateAndDrawFrameOld()
     }
 #endif
 
-    Vector3 cube_position = { 0.0f, 0.0f, 0.0f };
-    constexpr float CUBE_SIDE_LENGTH = 1.0f;
-    constexpr float CUBE_HALF_SIDE_LENGTH = CUBE_SIDE_LENGTH / 2.0f;
-    BoundingBox cube_bounding_box;
-    cube_bounding_box.min = Vector3SubtractValue(cube_position, CUBE_HALF_SIDE_LENGTH);
-    cube_bounding_box.max = Vector3AddValue(cube_position, CUBE_HALF_SIDE_LENGTH);
-    bool collision = false;
+    // UPDATE.
+    UpdateCamera(&g_camera);
+
+    // CHECK FOR OBJECT COLLISIONS.
+    const Object3D* selected_object = nullptr;
 #if MOUSE_PRESS_FOR_SELECT
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
 #endif
     {
         Vector2 mouse_position = GetMousePosition();
-        /// @todo   Do after camera update?
         Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
-        collision = CheckCollisionRayBox(mouse_ray, cube_bounding_box);
-        //std::printf("Collision!");
-    }
 
-    // UPDATE.
-    UpdateCamera(&g_camera);
+        for (const auto& object_3D : g_scene.Objects)
+        {
+            BoundingBox object_bounding_box = object_3D.GetBoundingBox();
+            bool collision = CheckCollisionRayBox(mouse_ray, object_bounding_box);
+            if (collision)
+            {
+                selected_object = &object_3D;
+                break;
+            }
+        }
+    }
 
     // DRAW.
     BeginDrawing();
-    ClearBackground(BLACK);
+    ClearBackground(g_scene.BackgroundColor);
 
     BeginMode3D(g_camera);
     {
-        Color cube_color = RED;
-        if (collision)
-        {
-            cube_color = BLUE;
-        }
-        DrawCube(cube_position, CUBE_SIDE_LENGTH, CUBE_SIDE_LENGTH, CUBE_SIDE_LENGTH, cube_color);
-        DrawCubeWires(cube_position, CUBE_SIDE_LENGTH, CUBE_SIDE_LENGTH, CUBE_SIDE_LENGTH, PINK);
         DrawGrid(10, 1.0f);
+
+        // DRAW EACH OBJECT IN THE SCENE.
+        for (const auto& object_3D : g_scene.Objects)
+        {
+            Color object_color = object_3D.SolidColor;
+            bool current_object_selected = (selected_object == &object_3D);
+            if (current_object_selected)
+            {
+                constexpr float COLOR_BRIGHTNESS_FACTOR = 1.3f;
+                object_color.r *= COLOR_BRIGHTNESS_FACTOR;
+                object_color.g *= COLOR_BRIGHTNESS_FACTOR;
+                object_color.b *= COLOR_BRIGHTNESS_FACTOR;
+            }
+
+            switch (object_3D.Type)
+            {
+                case ObjectType::LINE:
+                {
+                    DrawLine3D(object_3D.Line.StartPosition, object_3D.Line.EndPosition, object_color);
+                    break;
+                }
+                case ObjectType::CUBE:
+                {
+                    DrawCubeV(object_3D.Cube.CenterPosition, object_3D.Cube.Size, object_3D.SolidColor);
+                    if (current_object_selected)
+                    {
+                        DrawCubeWiresV(object_3D.Cube.CenterPosition, object_3D.Cube.Size, object_color);
+                    }
+                    break;
+                }
+                case ObjectType::SPHERE:
+                {
+                    DrawSphere(object_3D.Sphere.CenterPosition, object_3D.Sphere.Radius, object_3D.SolidColor);
+                    if (current_object_selected)
+                    {
+                        constexpr int RING_COUNT = 12;
+                        constexpr int SLICE_COUNT = 12;
+                        DrawSphereWires(object_3D.Sphere.CenterPosition, object_3D.Sphere.Radius, RING_COUNT, SLICE_COUNT, object_color);
+                    }
+                    break;
+                }
+                case ObjectType::CYLINDER:
+                {
+                    DrawCylinder(
+                        object_3D.Cylinder.CenterPosition,
+                        object_3D.Cylinder.TopRadius,
+                        object_3D.Cylinder.BottomRadius,
+                        object_3D.Cylinder.Height,
+                        object_3D.Cylinder.SliceCount,
+                        object_3D.SolidColor);
+                    if (current_object_selected)
+                    {
+                        DrawCylinderWires(
+                            object_3D.Cylinder.CenterPosition,
+                            object_3D.Cylinder.TopRadius,
+                            object_3D.Cylinder.BottomRadius,
+                            object_3D.Cylinder.Height,
+                            object_3D.Cylinder.SliceCount,
+                            object_color);
+                    }
+                    break;
+                }
+            }
+        }
     }
     EndMode3D();
-
-    Rectangle window_bounding_box =
-    {
-        .x = 10,
-        .y = 20,
-        .width = 200,
-        .height = 100
-    };
-    GuiWindowBox(window_bounding_box, "GUI Window");
 
     DrawFPS(10, 10);
 
@@ -229,6 +378,57 @@ int main()
     g_camera.type = CAMERA_PERSPECTIVE;
 
     SetCameraMode(g_camera, CAMERA_FREE);
+
+    Object3D line =
+    {
+        .Type = ObjectType::LINE,
+        .SolidColor = GOLD,
+        .Line = 
+        {
+            .StartPosition = Vector3{ -5.0f, -1.0f, -1.0f },
+            .EndPosition = Vector3{ -4.0f, 1.0f, 1.0f },
+        }
+    };
+    g_scene.Objects.emplace_back(line);
+
+    Object3D cube =
+    {
+        .Type = ObjectType::CUBE,
+        .SolidColor = MAROON,
+        .Cube = 
+        {
+            .CenterPosition = Vector3{ -3.0f, 1.0f, 0.0f },
+            .Size = Vector3{ 1.0f, 1.0f, 1.0f }
+        }
+    };
+    g_scene.Objects.emplace_back(cube);
+
+    Object3D sphere =
+    {
+        .Type = ObjectType::SPHERE,
+        .SolidColor = DARKGREEN,
+        .Sphere = 
+        {
+            .CenterPosition = Vector3{ 0.0f, 0.0f, 0.0f },
+            .Radius = 0.5f
+        }
+    };
+    g_scene.Objects.emplace_back(sphere);
+
+    Object3D cylinder =
+    {
+        .Type = ObjectType::CYLINDER,
+        .SolidColor = DARKBLUE,
+        .Cylinder = 
+        {
+            .CenterPosition = Vector3{ 2.0f, 1.0f, -1.0f },
+            .TopRadius = 0.5f,
+            .BottomRadius = 1.0f,
+            .Height = 1.0f,
+            .SliceCount = 16,
+        }
+    };
+    g_scene.Objects.emplace_back(cylinder);
 
 #if __EMSCRIPTEN__
     constexpr int LET_BROWSER_CONTROL_FRAME_RATE = 0;

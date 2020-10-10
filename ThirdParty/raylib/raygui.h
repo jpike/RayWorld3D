@@ -746,7 +746,9 @@ bool GuiWindowBox(Rectangle bounds, const char *title)
     int statusBarHeight = WINDOW_STATUSBAR_HEIGHT + 2*GuiGetStyle(STATUSBAR, BORDER_WIDTH);
     statusBarHeight += (statusBarHeight%2);
 
-    Rectangle statusBar = { bounds.x, bounds.y, bounds.width, statusBarHeight };
+    // CUSTOM MODIFICATION: Casting to (float) to avoid the following with Emscripten:
+    // error GE679EC29: non-constant-expression cannot be narrowed from type 'int' to 'float' in initializer list [-Wc++11-narrowing]
+    Rectangle statusBar = { bounds.x, bounds.y, bounds.width, (float)statusBarHeight };
     if (bounds.height < statusBarHeight*2) bounds.height = statusBarHeight*2;
     
     Rectangle windowPanel = { bounds.x, bounds.y + statusBarHeight - 1, bounds.width, bounds.height - statusBarHeight };
@@ -937,7 +939,9 @@ Rectangle GuiScrollPanel(Rectangle bounds, Rectangle content, Vector2 *scroll)
     if (hasHorizontalScrollBar && hasVerticalScrollBar)
     {
         // TODO: Consider scroll bars side
-        Rectangle corner = { horizontalScrollBar.x + horizontalScrollBar.width + 2, verticalScrollBar.y + verticalScrollBar.height + 2, horizontalScrollBarWidth - 4, verticalScrollBarWidth - 4 };
+        // CUSTOM MODIFICATION: Casting to (float) to avoid the following with Emscripten:
+        // error GE679EC29: non-constant-expression cannot be narrowed from type 'int' to 'float' in initializer list [-Wc++11-narrowing]
+        Rectangle corner = { horizontalScrollBar.x + horizontalScrollBar.width + 2, verticalScrollBar.y + verticalScrollBar.height + 2, (float)horizontalScrollBarWidth - 4, (float)verticalScrollBarWidth - 4 };
         GuiDrawRectangle(corner, 0, BLANK, Fade(GetColor(GuiGetStyle(LISTVIEW, TEXT + (state*3))), guiAlpha));
     }
 
@@ -1400,7 +1404,9 @@ bool GuiTextBox(Rectangle bounds, char *text, int textSize, bool editMode)
         bounds.x + GuiGetStyle(TEXTBOX, TEXT_PADDING) + GetTextWidth(text) + 2,
         bounds.y + bounds.height/2 - GuiGetStyle(DEFAULT, TEXT_SIZE),
         1,
-        GuiGetStyle(DEFAULT, TEXT_SIZE)*2
+        // CUSTOM MODIFICATION: Casting to (float) to avoid the following with Emscripten:
+        // error GE679EC29: non-constant-expression cannot be narrowed from type 'int' to 'float' in initializer list [-Wc++11-narrowing]
+        (float)GuiGetStyle(DEFAULT, TEXT_SIZE)*2
     };
 
     // Update control
@@ -1710,7 +1716,9 @@ bool GuiTextBoxMulti(Rectangle bounds, char *text, int textSize, bool editMode)
     };
 
     // Cursor position, [x, y] values should be updated
-    Rectangle cursor = { 0, 0, 1, GuiGetStyle(DEFAULT, TEXT_SIZE) + 2 };
+    // CUSTOM MODIFICATION: Casting to (float) to avoid the following with Emscripten:
+    // error GE679EC29: non-constant-expression cannot be narrowed from type 'int' to 'float' in initializer list [-Wc++11-narrowing]
+    Rectangle cursor = { 0, 0, 1, (float)GuiGetStyle(DEFAULT, TEXT_SIZE) + 2 };
 
     int textWidth = 0;
     int currentLine = 0;
@@ -2387,7 +2395,9 @@ Color GuiColorPanelEx(Rectangle bounds, Color color, float hue)
         DrawRectangleGradientEx(bounds, Fade(colBlack, 0), Fade(colBlack, guiAlpha), Fade(colBlack, guiAlpha), Fade(colBlack, 0));
 
         // Draw color picker: selector
-        Rectangle selector = { pickerSelector.x - GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE)/2, pickerSelector.y - GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE)/2, GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE), GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE) };
+        // CUSTOM MODIFICATION: Casting to (float) to avoid the following with Emscripten:
+        // error GE679EC29: non-constant-expression cannot be narrowed from type 'int' to 'float' in initializer list [-Wc++11-narrowing]
+        Rectangle selector = { pickerSelector.x - GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE)/2, pickerSelector.y - GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE)/2, (float)GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE), (float)GuiGetStyle(COLORPICKER, COLOR_SELECTOR_SIZE) };
         GuiDrawRectangle(selector, 0, BLANK, Fade(colWhite, guiAlpha));
     }
     else
