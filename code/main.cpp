@@ -1,5 +1,8 @@
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <random>
 #include <vector>
 #if __EMSCRIPTEN__
 #include <emscripten.h>
@@ -264,9 +267,6 @@ void UpdateAndDrawFrame()
 
     // CHECK FOR OBJECT COLLISIONS.
     const Object3D* selected_object = nullptr;
-#if MOUSE_PRESS_FOR_SELECT
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-#endif
     {
         Vector2 mouse_position = GetMousePosition();
         Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
@@ -281,6 +281,51 @@ void UpdateAndDrawFrame()
                 break;
             }
         }
+    }
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    {
+        std::random_device random_number_generator;
+
+        Vector2 mouse_position = GetMousePosition();
+        Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
+
+        Vector3 mouse_click_position_3D;
+        /// @todo   Proper camera unprojecting to calculate position.
+        constexpr unsigned int GRID_SIZE = 10;
+        constexpr int GRID_HALF_SIZE = static_cast<int>(GRID_SIZE / 2);
+        unsigned int random_x = random_number_generator();
+        unsigned int random_y = random_number_generator();
+        unsigned int random_z = random_number_generator();
+        int random_x_in_grid = static_cast<int>(random_x % GRID_SIZE);
+        int random_y_in_grid = static_cast<int>(random_y % GRID_SIZE);
+        int random_z_in_grid = static_cast<int>(random_z % GRID_SIZE);
+        mouse_click_position_3D.x = static_cast<float>(random_x_in_grid - GRID_HALF_SIZE);
+        mouse_click_position_3D.y = static_cast<float>(random_y_in_grid - GRID_HALF_SIZE);
+        mouse_click_position_3D.z = static_cast<float>(random_z_in_grid - GRID_HALF_SIZE);
+
+        std::printf("Creating object at %f, %f, %f\n", mouse_click_position_3D.x, mouse_click_position_3D.y, mouse_click_position_3D.z);
+
+        constexpr uint8_t MAX_COLOR_COMPONENT = 255;
+        Color color
+        {
+            .r = random_number_generator() % MAX_COLOR_COMPONENT,
+            .g = random_number_generator() % MAX_COLOR_COMPONENT,
+            .b = random_number_generator() % MAX_COLOR_COMPONENT,
+            .a = MAX_COLOR_COMPONENT
+        };
+
+        Object3D cube =
+        {
+            .Type = ObjectType::CUBE,
+            .SolidColor = color,
+            .Cube =
+            {
+                .CenterPosition = mouse_click_position_3D,
+                .Size = Vector3{ 1.0f, 1.0f, 1.0f }
+            }
+        };
+        g_scene.Objects.emplace_back(cube);
     }
 
     // DRAW.
@@ -379,6 +424,7 @@ int main()
 
     SetCameraMode(g_camera, CAMERA_FREE);
 
+#if DEFAULT_SCENE
     Object3D line =
     {
         .Type = ObjectType::LINE,
@@ -429,6 +475,7 @@ int main()
         }
     };
     g_scene.Objects.emplace_back(cylinder);
+#endif
 
 #if __EMSCRIPTEN__
     constexpr int LET_BROWSER_CONTROL_FRAME_RATE = 0;
