@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <optional>
 #include <random>
 #include <vector>
 #if __EMSCRIPTEN__
@@ -283,12 +284,23 @@ void UpdateAndDrawFrame()
         }
     }
 
+    std::optional<Ray> ray_to_view;
+    static float ground_height = 0.0f;
+
+    int mouse_wheel_movement = GetMouseWheelMove();
+    if (mouse_wheel_movement)
+    {
+        std::printf("Mouse wheel movement: %d\n", mouse_wheel_movement);
+    }
+    //ground_height -= (float)mouse_wheel_movement;
+
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
         std::random_device random_number_generator;
 
         Vector2 mouse_position = GetMousePosition();
         Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
+        ray_to_view = mouse_ray;
 
         Vector3 mouse_click_position_3D;
         /// @todo   Proper camera unprojecting to calculate position.
@@ -304,6 +316,9 @@ void UpdateAndDrawFrame()
         mouse_click_position_3D.y = static_cast<float>(random_y_in_grid - GRID_HALF_SIZE);
         mouse_click_position_3D.z = static_cast<float>(random_z_in_grid - GRID_HALF_SIZE);
 
+        RayHitInfo ray_hit_info = GetCollisionRayGround(mouse_ray, ground_height);
+
+        mouse_click_position_3D = ray_hit_info.position;
         std::printf("Creating object at %f, %f, %f\n", mouse_click_position_3D.x, mouse_click_position_3D.y, mouse_click_position_3D.z);
 
         constexpr uint8_t MAX_COLOR_COMPONENT = 255;
@@ -398,6 +413,11 @@ void UpdateAndDrawFrame()
                     break;
                 }
             }
+        }
+
+        if (ray_to_view)
+        {
+            DrawRay(*ray_to_view, VIOLET);
         }
     }
     EndMode3D();
