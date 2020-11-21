@@ -4,6 +4,7 @@
 #include <limits>
 #include <optional>
 #include <random>
+#include <string>
 #include <vector>
 #if __EMSCRIPTEN__
 #include <emscripten.h>
@@ -13,245 +14,15 @@
 #include <raylib/raylib.h>
 #include <raylib/raymath.h>
 
+#include "Grid.h"
+#include "Scene.h"
+
 Camera3D g_camera;
-
-enum class ObjectType
-{
-    INVALID = 0,
-    LINE,
-    CUBE,
-    SPHERE,
-    CYLINDER,
-};
-
-class Line
-{
-public:
-    Vector3 StartPosition = {};
-    Vector3 EndPosition = {};
-};
-
-class Cube
-{
-public:
-    Vector3 CenterPosition = {};
-    Vector3 Size = {};
-};
-
-class Sphere
-{
-public:
-    Vector3 CenterPosition = {};
-    float Radius = 0.0f;
-};
-
-class Cylinder
-{
-public:
-    Vector3 CenterPosition = {};
-    float TopRadius = 0.0f;
-    float BottomRadius = 0.0f;
-    float Height = 0.0f;
-    int SliceCount = 0;
-};
-
-class Object3D
-{
-public:
-    BoundingBox GetBoundingBox() const
-    {
-        BoundingBox bounding_box;
-
-        switch (Type)
-        {
-            case ObjectType::LINE:
-            {
-                bounding_box.min = Vector3Min(Line.StartPosition, Line.EndPosition);
-                bounding_box.max = Vector3Max(Line.StartPosition, Line.EndPosition);
-                break;
-            }
-            case ObjectType::CUBE:
-            {
-                Vector3 cube_half_size = Vector3Scale(Cube.Size, 0.5f);
-                bounding_box.min = Vector3Subtract(Cube.CenterPosition, cube_half_size);
-                bounding_box.max = Vector3Add(Cube.CenterPosition, cube_half_size);
-                break;
-            }
-            case ObjectType::SPHERE:
-            {
-                bounding_box.min = Vector3SubtractValue(Sphere.CenterPosition, Sphere.Radius);
-                bounding_box.max = Vector3AddValue(Sphere.CenterPosition, Sphere.Radius);
-                break;
-            }
-            case ObjectType::CYLINDER:
-            {
-                float cylinder_max_radius = std::max(Cylinder.TopRadius, Cylinder.TopRadius);
-                float cylinder_half_height = Cylinder.Height / 2.0f;
-                Vector3 cylinder_half_size = { cylinder_max_radius, cylinder_half_height, cylinder_max_radius };
-
-                bounding_box.min = Vector3Subtract(Cylinder.CenterPosition, cylinder_half_size);
-                bounding_box.max = Vector3Add(Cylinder.CenterPosition, cylinder_half_size);
-                break;
-            }
-        }
-
-        return bounding_box;
-    }
-
-    ObjectType Type = ObjectType::INVALID;
-    Color SolidColor = BLACK;
-
-    union
-    {
-        Line Line;
-        Cube Cube;
-        Sphere Sphere;
-        Cylinder Cylinder;
-    };
-};
-
-class Scene
-{
-public:
-    Color BackgroundColor = BLACK;
-    std::vector<Object3D> Objects = {};
-};
-
+Grid g_grid = { .Slices = 10, .Spacing = 1.0f };
 Scene g_scene;
-
-void UpdateAndDrawFrameGui()
-{
-    // UPDATE.
-    UpdateCamera(&g_camera);
-
-    // DRAW.
-    BeginDrawing();
-    ClearBackground(g_scene.BackgroundColor);
-
-    BeginMode3D(g_camera);
-    {
-    }
-    EndMode3D();
-
-    static bool gui_window_open = true;
-    static Vector2 scroll_position = { 0.0f, 0.0f };
-    if (gui_window_open)
-    {
-        gui_window_open = !GuiWindowBox({ .x = 10, .y = 20, .width = 550, .height = 350 }, "GuiWindowBox");
-        GuiGroupBox({ .x = 15, .y = 60, .width = 100, .height = 20 }, "GuiGroupBox");
-        GuiLine({ .x = 15, .y = 90, .width = 100, .height = 20 }, "GuiLine");
-        GuiPanel({ .x = 15, .y = 110, .width = 100, .height = 20});
-        GuiScrollPanel(
-            { .x = 15, .y = 140, .width = 100, .height = 50 },
-            { .x = 17, .y = 142, .width = 200, .height = 100 },
-            &scroll_position);
-
-        GuiLabel({ .x = 15, .y = 200, .width = 100, .height = 20 }, "GuiLabel");
-        GuiButton({ .x = 15, .y = 240, .width = 100, .height = 20 }, "GuiButton");
-        GuiLabelButton({ .x = 15, .y = 270, .width = 100, .height = 20 }, "GuiLabelButton");
-
-        GuiToggle({ .x = 120, .y = 60, .width = 100, .height = 20 }, "GuiToggle", true);
-        GuiToggleGroup({ .x = 120, .y = 90, .width = 100, .height = 20 }, "Gui\nToggle\nGroup", 0);
-
-        GuiCheckBox({ .x = 120, .y = 150, .width = 100, .height = 20 }, "GuiCheckBox", true);
-        GuiComboBox({ .x = 120, .y = 180, .width = 100, .height = 20 }, "Gui\nCombo\nBox", 0);
-        int active = 0;
-        GuiDropdownBox({ .x = 120, .y = 210, .width = 100, .height = 20 }, "Gui\nDropdown\nBox", &active, false);
-
-        static int spinner_value = 1;
-        GuiSpinner(
-            { .x = 250, .y = 60, .width = 100, .height = 20 },
-            "GuiSpinner",
-            &spinner_value,
-            1,
-            100,
-            false);
-
-        static int value_box_value = 2;
-        GuiValueBox(
-            { .x = 250, .y = 90, .width = 100, .height = 20 },
-            "GuiValueBox",
-            & value_box_value,
-            1,
-            100,
-            false);
-
-        char text_box_text[] = "GuiTextBox";
-        GuiTextBox(
-            { .x = 250, .y = 120, .width = 100, .height = 20 }, 
-            text_box_text, 
-            sizeof(text_box_text),
-            false);
-
-        char multi_text_box_text[] = "GuiTextBoxMulti";
-        GuiTextBoxMulti(
-            { .x = 250, .y = 150, .width = 100, .height = 20 },
-            multi_text_box_text,
-            sizeof(multi_text_box_text),
-            false);
-
-        GuiSlider(
-            { .x = 250, .y = 180, .width = 100, .height = 20 },
-            "GuiSliderTextLeft", 
-            "GuiSliderTextRight",
-            2.0f, 
-            1.0f, 
-            10.0f);
-
-        GuiSliderBar(
-            { .x = 250, .y = 210, .width = 100, .height = 20 },
-            "GuiSliderBarTextLeft",
-            "GuiSliderBarTextRight",
-            2.0f,
-            1.0f,
-            10.0f);
-
-        GuiProgressBar(
-            { .x = 250, .y = 240, .width = 100, .height = 20 },
-            "GuiProgressBarTextLeft",
-            "GuiProgressBarTextRight",
-            2.0f,
-            1.0f,
-            10.0f);
-
-        GuiStatusBar({ .x = 250, .y = 270, .width = 100, .height = 20 }, "GuiStatusBar");
-
-        GuiScrollBar(
-            { .x = 370, .y = 60, .width = 50, .height = 20 },
-            2, 
-            1, 
-            5);
-
-        GuiGrid({ .x = 370, .y = 90, .width = 50, .height = 20 }, 4.0f, 2);
-
-        static int scroll_index = 0;
-        GuiListView(
-            { .x = 420, .y = 120, .width = 50, .height = 20 }, 
-            "Gui\nList\nView", 
-            &scroll_index, 
-            false);
-        //GuiListViewEx(Rectangle bounds, const char** text, int count, int* focus, int* scrollIndex, int active);
-        GuiMessageBox(
-            { .x = 470, .y = 150, .width = 50, .height = 20 },
-            "GuiMessageBoxTitle", 
-            "GuiMessageBoxMessage", 
-            "OK\nCancel");
-        char text_input[] = "text input";
-        GuiTextInputBox(
-            { .x = 470, .y = 180, .width = 50, .height = 20 },
-            "GuiTextInputBoxTitle", 
-            "GuiTextInputBoxMessage", 
-            "OK\nCancel",
-            text_input);
-
-        GuiColorPicker({ .x = 420, .y = 210, .width = 50, .height = 20 }, BLACK);
-        GuiColorPanel({ .x = 420, .y = 240, .width = 50, .height = 20 }, RED);
-        GuiColorBarAlpha({ .x = 420, .y = 270, .width = 50, .height = 20 }, 1.0f);
-        GuiColorBarHue({ .x = 420, .y = 300, .width = 50, .height = 20 }, 0.5f);
-    }
-
-    EndDrawing();
-}
+Color g_object_color = RAYWHITE;
+int g_current_object_type_index = (int)ObjectType::CUBE;
+Model g_current_model;
 
 void UpdateAndDrawFrame()
 {
@@ -284,6 +55,7 @@ void UpdateAndDrawFrame()
         }
     }
 
+    // ADJUST THE THIRD DIMENSION FOR PLACING OBJECTS.
     std::optional<Ray> ray_to_view;
     static float ground_height = 0.0f;
 
@@ -294,53 +66,131 @@ void UpdateAndDrawFrame()
     }
     //ground_height -= (float)mouse_wheel_movement;
 
+    if (IsKeyPressed(KEY_ONE))
+    {
+        ground_height -= 1.0f;
+    }
+    if (IsKeyPressed(KEY_TWO))
+    {
+        ground_height += 1.0f;
+    }
+
+    // DETERMINE WHERE THE MOUSE CURRENTLY POINTS IN 3D SPACE.
+    std::random_device random_number_generator;
+
+    Vector2 mouse_position = GetMousePosition();
+    Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
+    ray_to_view = mouse_ray;
+
+    Vector3 mouse_click_position_3D;
+    float grid_size = (g_grid.Slices * g_grid.Spacing);
+    int grid_size_rounded_up = (int)std::ceilf(grid_size);
+    int grid_half_size = (int)(grid_size / 2.0f);
+    unsigned int random_x = random_number_generator();
+    unsigned int random_y = random_number_generator();
+    unsigned int random_z = random_number_generator();
+    int random_x_in_grid = (int)(random_x % grid_size_rounded_up);
+    int random_y_in_grid = (int)(random_y % grid_size_rounded_up);
+    int random_z_in_grid = (int)(random_z % grid_size_rounded_up);
+    mouse_click_position_3D.x = (float)(random_x_in_grid - grid_half_size);
+    mouse_click_position_3D.y = (float)(random_y_in_grid - grid_half_size);
+    mouse_click_position_3D.z = (float)(random_z_in_grid - grid_half_size);
+
+    Vector3 up_vector = { 0.0f, 1.0f, 0.0f };
+    float scale = Vector3DotProduct(mouse_ray.direction, up_vector);
+
+    RayHitInfo ray_hit_info = GetCollisionRayGround(mouse_ray, -scale * ground_height);
+    //RayHitInfo ray_hit_info = GetCollisionRayGround(mouse_ray, ground_height);
+    mouse_click_position_3D = ray_hit_info.position;
+
+    // PLACE AN OBJECT IF THE USER CLICKED.
+    /// @todo   Prevent this if GUI being interacted with!
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
-        std::random_device random_number_generator;
-
-        Vector2 mouse_position = GetMousePosition();
-        Ray mouse_ray = GetMouseRay(mouse_position, g_camera);
-        ray_to_view = mouse_ray;
-
-        Vector3 mouse_click_position_3D;
-        /// @todo   Proper camera unprojecting to calculate position.
-        constexpr unsigned int GRID_SIZE = 10;
-        constexpr int GRID_HALF_SIZE = static_cast<int>(GRID_SIZE / 2);
-        unsigned int random_x = random_number_generator();
-        unsigned int random_y = random_number_generator();
-        unsigned int random_z = random_number_generator();
-        int random_x_in_grid = static_cast<int>(random_x % GRID_SIZE);
-        int random_y_in_grid = static_cast<int>(random_y % GRID_SIZE);
-        int random_z_in_grid = static_cast<int>(random_z % GRID_SIZE);
-        mouse_click_position_3D.x = static_cast<float>(random_x_in_grid - GRID_HALF_SIZE);
-        mouse_click_position_3D.y = static_cast<float>(random_y_in_grid - GRID_HALF_SIZE);
-        mouse_click_position_3D.z = static_cast<float>(random_z_in_grid - GRID_HALF_SIZE);
-
-        RayHitInfo ray_hit_info = GetCollisionRayGround(mouse_ray, ground_height);
-
-        mouse_click_position_3D = ray_hit_info.position;
         std::printf("Creating object at %f, %f, %f\n", mouse_click_position_3D.x, mouse_click_position_3D.y, mouse_click_position_3D.z);
 
-        constexpr uint8_t MAX_COLOR_COMPONENT = 255;
-        Color color
+        ObjectType current_object_type = (ObjectType)g_current_object_type_index;
+        switch (current_object_type)
         {
-            .r = random_number_generator() % MAX_COLOR_COMPONENT,
-            .g = random_number_generator() % MAX_COLOR_COMPONENT,
-            .b = random_number_generator() % MAX_COLOR_COMPONENT,
-            .a = MAX_COLOR_COMPONENT
-        };
-
-        Object3D cube =
-        {
-            .Type = ObjectType::CUBE,
-            .SolidColor = color,
-            .Cube =
+            case ObjectType::LINE:
             {
-                .CenterPosition = mouse_click_position_3D,
-                .Size = Vector3{ 1.0f, 1.0f, 1.0f }
+                Object3D line =
+                {
+                    .Type = ObjectType::LINE,
+                    .SolidColor = g_object_color,
+                    .Line =
+                    {
+                        .StartPosition = mouse_click_position_3D,
+                        .EndPosition = Vector3Add(mouse_click_position_3D, Vector3 {1.0f, 1.0f, 1.0f})
+                    }
+                };
+                g_scene.Objects.emplace_back(line);
+                break;
             }
-        };
-        g_scene.Objects.emplace_back(cube);
+            case ObjectType::CUBE:
+            {
+                Object3D cube =
+                {
+                    .Type = ObjectType::CUBE,
+                    .SolidColor = g_object_color,
+                    .Cube =
+                    {
+                        .CenterPosition = mouse_click_position_3D,
+                        .Size = Vector3{ 1.0f, 1.0f, 1.0f }
+                    }
+                };
+                g_scene.Objects.emplace_back(cube);
+                break;
+            }
+            case ObjectType::SPHERE:
+            {
+                Object3D sphere =
+                {
+                    .Type = ObjectType::SPHERE,
+                    .SolidColor = g_object_color,
+                    .Sphere =
+                    {
+                        .CenterPosition = mouse_click_position_3D,
+                        .Radius = 0.5f
+                    }
+                };
+                g_scene.Objects.emplace_back(sphere);
+                break;
+            }
+            case ObjectType::CYLINDER:
+            {
+                Object3D cylinder =
+                {
+                    .Type = ObjectType::CYLINDER,
+                    .SolidColor = g_object_color,
+                    .Cylinder =
+                    {
+                        .CenterPosition = mouse_click_position_3D,
+                        .TopRadius = 0.5f,
+                        .BottomRadius = 1.0f,
+                        .Height = 1.0f,
+                        .SliceCount = 16,
+                    }
+                };
+                g_scene.Objects.emplace_back(cylinder);
+                break;
+            }
+            case ObjectType::MODEL:
+            {
+                Object3D model =
+                {
+                    .Type = ObjectType::MODEL,
+                    .SolidColor = g_object_color,
+                    .Model = 
+                    {
+                        .CenterPosition = mouse_click_position_3D,
+                        .Model = g_current_model
+                    }
+                };
+                g_scene.Objects.emplace_back(model);
+                break;
+            }
+        }
     }
 
     // DRAW.
@@ -349,7 +199,8 @@ void UpdateAndDrawFrame()
 
     BeginMode3D(g_camera);
     {
-        DrawGrid(10, 1.0f);
+        // DRAW THE GRID.
+        DrawGrid((int)g_grid.Slices, g_grid.Spacing);
 
         // DRAW EACH OBJECT IN THE SCENE.
         for (const auto& object_3D : g_scene.Objects)
@@ -412,17 +263,111 @@ void UpdateAndDrawFrame()
                     }
                     break;
                 }
+                case ObjectType::MODEL:
+                {
+                    DrawModel(object_3D.Model.Model, object_3D.Model.CenterPosition, 1.0f, object_3D.SolidColor);
+                    if (current_object_selected)
+                    {
+                        DrawModel(object_3D.Model.Model, object_3D.Model.CenterPosition, 1.0f, object_3D.SolidColor);
+                    }
+                    break;
+                };
             }
         }
 
-        if (ray_to_view)
+        // DRAW AN ITEM FOR THE CURRENT MOUSE LOCATION.
+        ObjectType current_object_type = (ObjectType)g_current_object_type_index;
+        switch (current_object_type)
         {
-            DrawRay(*ray_to_view, VIOLET);
+            case ObjectType::SPHERE:
+            {
+                constexpr int RING_COUNT = 12;
+                constexpr int SLICE_COUNT = 12;
+                DrawSphereWires(ray_hit_info.position, 0.5f, RING_COUNT, SLICE_COUNT, g_object_color);
+                break;
+            }
+            case ObjectType::CYLINDER:
+            {
+                DrawCylinderWires(
+                    ray_hit_info.position,
+                    0.5f,
+                    1.0f,
+                    1.0f,
+                    16,
+                    g_object_color);
+                break;
+            }
+            default:
+            {
+                DrawCubeWires(
+                    ray_hit_info.position,
+                    1.0f,
+                    1.0f,
+                    1.0f,
+                    g_object_color);
+                break;
+            }
         }
     }
     EndMode3D();
 
+    // DRAW THE GUI.
+    Rectangle grid_slices_slider_bounding_box = { .x = 0, .y = 30, .width = 100, .height = 20 };
+    g_grid.Slices = GuiSlider(
+        grid_slices_slider_bounding_box,
+        "", 
+        "Grid Slices",
+        g_grid.Slices, 
+        1.0f, 
+        100.0f);
+
+    Rectangle grid_spacing_slider_bounding_box = grid_slices_slider_bounding_box;
+    grid_spacing_slider_bounding_box.y += grid_slices_slider_bounding_box.height;
+    g_grid.Spacing = GuiSlider(
+        grid_spacing_slider_bounding_box,
+        "", 
+        "Grid Spacing",
+        g_grid.Spacing, 
+        1.0f, 
+        100.0f);
+
+    Rectangle color_picker_bounding_box = grid_spacing_slider_bounding_box;
+    color_picker_bounding_box.y += grid_spacing_slider_bounding_box.height;
+    color_picker_bounding_box.height = 100.f;
+    g_object_color = GuiColorPicker(color_picker_bounding_box, g_object_color);
+
+    constexpr int MAX_MODEL_FILEPATH = 256;
+    static char model_filepath[MAX_MODEL_FILEPATH] = {};
+    Rectangle model_filename_bounding_box = color_picker_bounding_box;
+    model_filename_bounding_box.y += color_picker_bounding_box.height;
+    model_filename_bounding_box.width = 600;
+    model_filename_bounding_box.height = grid_spacing_slider_bounding_box.height;
+    GuiTextBox(model_filename_bounding_box, model_filepath, MAX_MODEL_FILEPATH, true);
+
+    static bool object_type_drop_down_open = false;
+    Rectangle object_type_drop_down_bounds = model_filename_bounding_box;
+    object_type_drop_down_bounds.width = color_picker_bounding_box.height;
+    object_type_drop_down_bounds.y += model_filename_bounding_box.height;
+    bool drop_down_clicked = GuiDropdownBox(
+        object_type_drop_down_bounds, 
+        "Line\nCube\nSphere\nCylinder\nModel", 
+        &g_current_object_type_index, 
+        object_type_drop_down_open);
+    if (drop_down_clicked)
+    {
+        object_type_drop_down_open = !object_type_drop_down_open;
+
+        if (ObjectType::MODEL == (ObjectType)g_current_object_type_index)
+        {
+            g_current_model = LoadModel(model_filepath);
+        }
+    }
+    
+    // DRAW THE FRAME RATE.
     DrawFPS(10, 10);
+
+    std::string ground_height_text = "Ground Height: " + std::to_string(ground_height);
+    DrawText(ground_height_text.c_str(), 100, 10, 10, LIME);
 
     EndDrawing();
 }
@@ -430,8 +375,8 @@ void UpdateAndDrawFrame()
 int main()
 {
     // GENERIC INIT.
-    constexpr int SCREEN_WIDTH_IN_PIXELS = 600;
-    constexpr int SCREEN_HEIGHT_IN_PIXELS = 400;
+    constexpr int SCREEN_WIDTH_IN_PIXELS = 800;
+    constexpr int SCREEN_HEIGHT_IN_PIXELS = 600;
     InitWindow(SCREEN_WIDTH_IN_PIXELS, SCREEN_HEIGHT_IN_PIXELS, "raylib");
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 
@@ -443,59 +388,6 @@ int main()
     g_camera.type = CAMERA_PERSPECTIVE;
 
     SetCameraMode(g_camera, CAMERA_FREE);
-
-#if DEFAULT_SCENE
-    Object3D line =
-    {
-        .Type = ObjectType::LINE,
-        .SolidColor = GOLD,
-        .Line = 
-        {
-            .StartPosition = Vector3{ -5.0f, -1.0f, -1.0f },
-            .EndPosition = Vector3{ -4.0f, 1.0f, 1.0f },
-        }
-    };
-    g_scene.Objects.emplace_back(line);
-
-    Object3D cube =
-    {
-        .Type = ObjectType::CUBE,
-        .SolidColor = MAROON,
-        .Cube = 
-        {
-            .CenterPosition = Vector3{ -3.0f, 1.0f, 0.0f },
-            .Size = Vector3{ 1.0f, 1.0f, 1.0f }
-        }
-    };
-    g_scene.Objects.emplace_back(cube);
-
-    Object3D sphere =
-    {
-        .Type = ObjectType::SPHERE,
-        .SolidColor = DARKGREEN,
-        .Sphere = 
-        {
-            .CenterPosition = Vector3{ 0.0f, 0.0f, 0.0f },
-            .Radius = 0.5f
-        }
-    };
-    g_scene.Objects.emplace_back(sphere);
-
-    Object3D cylinder =
-    {
-        .Type = ObjectType::CYLINDER,
-        .SolidColor = DARKBLUE,
-        .Cylinder = 
-        {
-            .CenterPosition = Vector3{ 2.0f, 1.0f, -1.0f },
-            .TopRadius = 0.5f,
-            .BottomRadius = 1.0f,
-            .Height = 1.0f,
-            .SliceCount = 16,
-        }
-    };
-    g_scene.Objects.emplace_back(cylinder);
-#endif
 
 #if __EMSCRIPTEN__
     constexpr int LET_BROWSER_CONTROL_FRAME_RATE = 0;
